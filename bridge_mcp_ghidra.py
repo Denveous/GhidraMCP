@@ -10,11 +10,10 @@ import sys
 import requests
 import argparse
 import logging
-from urllib.parse import urljoin
 
 from mcp.server.fastmcp import FastMCP
 
-DEFAULT_GHIDRA_SERVER = "http://127.0.0.1:8080/"
+DEFAULT_GHIDRA_SERVER = "http://127.0.0.1:8179/"
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ def safe_get(endpoint: str, params: dict = None) -> list:
     if params is None:
         params = {}
 
-    url = urljoin(ghidra_server_url, endpoint)
+    url = f"{ghidra_server_url}/{endpoint}"
 
     try:
         response = requests.get(url, params=params, timeout=5)
@@ -40,22 +39,33 @@ def safe_get(endpoint: str, params: dict = None) -> list:
         else:
             return [f"Error {response.status_code}: {response.text.strip()}"]
     except Exception as e:
-        return [f"Request failed: {str(e)}"]
+        return [f"Request failed: {e!r}"]
 
 def safe_post(endpoint: str, data: dict | str) -> str:
     try:
-        url = urljoin(ghidra_server_url, endpoint)
         if isinstance(data, dict):
-            response = requests.post(url, data=data, timeout=5)
+            response = requests.post(f"{ghidra_server_url}/{endpoint}", data=data, timeout=5)
         else:
-            response = requests.post(url, data=data.encode("utf-8"), timeout=5)
+            response = requests.post(f"{ghidra_server_url}/{endpoint}", data=data.encode("utf-8"), timeout=5)
         response.encoding = 'utf-8'
         if response.ok:
             return response.text.strip()
         else:
             return f"Error {response.status_code}: {response.text.strip()}"
     except Exception as e:
-        return f"Request failed: {str(e)}"
+        return f"Request failed: {e!r}"
+
+def safe_post_json(endpoint: str, data: dict) -> dict:
+    try:
+        response = requests.post(f"{ghidra_server_url}/{endpoint}", data=data, timeout=5)
+        response.encoding = 'utf-8'
+        if response.ok:
+            import json
+            return json.loads(response.text)
+        else:
+            return {"error": f"Error {response.status_code}: {response.text.strip()}"}
+    except Exception as e:
+        return {"error": f"Request failed: {e!r}"}
 
 @mcp.tool()
 def list_methods(offset: int = 0, limit: int = 100) -> list:
@@ -225,67 +235,180 @@ def set_local_variable_type(function_address: str, variable_name: str, new_type:
     return safe_post("set_local_variable_type", {"function_address": function_address, "variable_name": variable_name, "new_type": new_type})
 
 @mcp.tool()
-def get_xrefs_to(address: str, offset: int = 0, limit: int = 100) -> list:
+def search_strings(query: str = "", offset: int = 0, limit: int = 100) -> list:
     """
-    Get all references to the specified address (xref to).
-    
-    Args:
-        address: Target address in hex format (e.g. "0x1400010a0")
-        offset: Pagination offset (default: 0)
-        limit: Maximum number of references to return (default: 100)
-        
-    Returns:
-        List of references to the specified address
+    Search for strings in the program. Returns list of "address: string" entries.
     """
-    return safe_get("xrefs_to", {"address": address, "offset": offset, "limit": limit})
+    return safe_get("search_strings", {"query": query, "offset": offset, "limit": limit})
 
 @mcp.tool()
-def get_xrefs_from(address: str, offset: int = 0, limit: int = 100) -> list:
+def search_bytes(pattern: str, limit: int = 100) -> list:
     """
-    Get all references from the specified address (xref from).
-    
-    Args:
-        address: Source address in hex format (e.g. "0x1400010a0")
-        offset: Pagination offset (default: 0)
-        limit: Maximum number of references to return (default: 100)
-        
-    Returns:
-        List of references from the specified address
+    Search for byte patterns in the program. Pattern is hex bytes separated by spaces, use ? for wildcards.
+    Example: "41 B8 88 13 00 00 E8 ? ? ? ?"
     """
-    return safe_get("xrefs_from", {"address": address, "offset": offset, "limit": limit})
+    import urllib.parse
+    params = urllib.parse.urlencode({"pattern": pattern, "limit": limit}, quote_via=urllib.parse.quote)
+    return safe_get(f"search_bytes?{params}")
 
 @mcp.tool()
-def get_function_xrefs(name: str, offset: int = 0, limit: int = 100) -> list:
+def get_references(address: str) -> list:
     """
-    Get all references to the specified function by name.
-    
-    Args:
-        name: Function name to search for
-        offset: Pagination offset (default: 0)
-        limit: Maximum number of references to return (default: 100)
-        
-    Returns:
-        List of references to the specified function
+    Get all references to the specified address. Returns list of addresses that reference it.
     """
-    return safe_get("function_xrefs", {"name": name, "offset": offset, "limit": limit})
+    return safe_get("get_references", {"address": address})
 
 @mcp.tool()
-def list_strings(offset: int = 0, limit: int = 2000, filter: str = None) -> list:
+def get_function_bytes(address: str, length: int = 32) -> dict:
     """
-    List all defined strings in the program with their addresses.
-    
-    Args:
-        offset: Pagination offset (default: 0)
-        limit: Maximum number of strings to return (default: 2000)
-        filter: Optional filter to match within string content
-        
-    Returns:
-        List of strings with their addresses
+    Get raw bytes from a function's entry point. Returns hex string of bytes.
+    Useful for extracting byte signatures for patching.
     """
-    params = {"offset": offset, "limit": limit}
-    if filter:
-        params["filter"] = filter
-    return safe_get("strings", params)
+    import json
+    import requests
+    url = f"{ghidra_server_url}/get_function_bytes"
+    try:
+        response = requests.get(url, params={"address": address, "length": length}, timeout=5)
+        response.encoding = 'utf-8'
+        if response.ok:
+            return json.loads(response.text)
+        else:
+            return {"error": f"Error {response.status_code}: {response.text.strip()}"}
+    except Exception as e:
+        return {"error": f"Request failed: {e!r}"}
+
+@mcp.tool()
+def patch_bytes(address: str, bytes: str) -> str:
+    """
+    Patch bytes at the specified address. Takes hex bytes separated by spaces.
+    Example: "B0 00 C3"
+    """
+    return safe_post("patch_bytes", {"address": address, "bytes": bytes})
+
+@mcp.tool()
+def get_strings_in_function(address: str) -> list:
+    """
+    Get all string literals referenced within a function.
+    Returns list of "address: string" entries.
+    """
+    return safe_get("get_strings_in_function", {"address": address})
+
+@mcp.tool()
+def get_function_callers(address: str) -> list:
+    """
+    Get all functions that call the function at the specified address.
+    Returns list of "call_address: caller_function_name" entries.
+    """
+    return safe_get("get_function_callers", {"address": address})
+
+@mcp.tool()
+def get_function_callees(address: str) -> list:
+    """
+    Get all functions called by the function at the specified address.
+    Returns list of "target_address: callee_function_name" entries.
+    """
+    return safe_get("get_function_callees", {"address": address})
+
+@mcp.tool()
+def get_bytes_at(address: str, length: int = 32) -> dict:
+    """
+    Read raw bytes at any address (not just function start).
+    Returns dict with address, bytes (hex string), and length.
+    """
+    response = safe_get("get_bytes_at", {"address": address, "length": length})
+    if response and len(response) > 0:
+        full_response = "\n".join(response)
+        if full_response and not full_response.startswith("Error"):
+            import json
+            return json.loads(full_response)
+    return {"error": "Failed to read bytes"}
+
+@mcp.tool()
+def disassemble_range(start: str, end: str) -> str:
+    """
+    Disassemble a range of addresses from start to end (inclusive).
+    Returns assembly with bytes and instructions.
+    """
+    lines = safe_get("disassemble_range", {"start": start, "end": end})
+    if isinstance(lines, list):
+        return "\n".join(lines)
+    return lines
+
+@mcp.tool()
+def export_binary(path: str) -> str:
+    """
+    Export the entire binary to a file.
+    All initialized memory blocks will be written to the specified path.
+    """
+    return safe_post("export_binary", {"path": path})
+
+@mcp.tool()
+def get_function_params(address: str) -> list:
+    """
+    Get function parameters with types and register locations.
+    Returns list of "type name (register)" entries.
+    """
+    return safe_get("get_function_params", {"address": address})
+
+@mcp.tool()
+def get_function_locals(address: str) -> list:
+    """
+    Get local variables for a function with types.
+    Returns list of "type name (offset)" entries.
+    """
+    return safe_get("get_function_locals", {"address": address})
+
+@mcp.tool()
+def get_containing_block(address: str) -> dict:
+    """
+    Get memory block information for the address.
+    Returns dict with name, start, end, size, permissions, etc.
+    """
+    response = safe_get("get_containing_block", {"address": address})
+    if response and len(response) > 0:
+        import json
+        return json.loads(response[0])
+    return {"error": "Failed to get block info"}
+
+@mcp.tool()
+def get_entry_points() -> list:
+    """
+    Get all entry points (external symbols).
+    Returns list of "address: name" entries.
+    """
+    return safe_get("get_entry_points")
+
+@mcp.tool()
+def get_data_at(address: str) -> dict:
+    """
+    Get defined data at address (arrays, structs, etc).
+    Returns dict with address, type, label, value.
+    """
+    response = safe_get("get_data_at", {"address": address})
+    if response and len(response) > 0:
+        import json
+        return json.loads(response[0])
+    return {"error": "No data at address"}
+
+@mcp.tool()
+def get_type_at(address: str) -> dict:
+    """
+    Get type information at address (data type or function).
+    Returns dict with address, type, and related info.
+    """
+    response = safe_get("get_type_at", {"address": address})
+    if response and len(response) > 0:
+        import json
+        return json.loads(response[0])
+    return {"error": "No type at address"}
+
+@mcp.tool()
+def search_for_value(value: str) -> list:
+    """
+    Search for a hex value in all defined data.
+    Returns list of "address: label" entries where value is found.
+    """
+    return safe_get("search_for_value", {"value": value})
 
 def main():
     parser = argparse.ArgumentParser(description="MCP server for Ghidra")
@@ -299,8 +422,6 @@ def main():
                         help="Transport protocol for MCP, default: stdio")
     args = parser.parse_args()
     
-    # Use the global variable to ensure it's properly updated
-    global ghidra_server_url
     if args.ghidra_server:
         ghidra_server_url = args.ghidra_server
     

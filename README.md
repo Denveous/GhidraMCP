@@ -21,6 +21,86 @@ MCP Server + Ghidra Plugin
 - Automatically rename methods and data
 - List methods, classes, imports, and exports
 
+# MCP Tools
+
+ghidraMCP exposes 41 tools through MCP for LLM-assisted reverse engineering:
+
+## Listing & Navigation
+
+| Tool | Description |
+|------|-------------|
+| `list_methods` | List all function names with pagination |
+| `list_classes` | List all namespace/class names with pagination |
+| `list_functions` | List all functions in the database |
+| `list_segments` | List all memory segments with pagination |
+| `list_imports` | List imported symbols with pagination |
+| `list_exports` | List exported functions/symbols with pagination |
+| `list_namespaces` | List all non-global namespaces with pagination |
+| `list_data_items` | List defined data labels and values with pagination |
+| `get_current_address` | Get the address currently selected by user |
+| `get_current_function` | Get the function currently selected by user |
+| `get_entry_points` | Get all entry points (external symbols) |
+
+## Decompilation & Disassembly
+
+| Tool | Description |
+|------|-------------|
+| `decompile_function` | Decompile function by name to C code |
+| `decompile_function_by_address` | Decompile function at address to C code |
+| `disassemble_function` | Get assembly code for a function |
+| `disassemble_range` | Disassemble address range (start to end) |
+
+## Function Analysis
+
+| Tool | Description |
+|------|-------------|
+| `get_function_by_address` | Get function by its address |
+| `get_function_params` | Get function parameters with types and registers |
+| `get_function_locals` | Get local variables with types and offsets |
+| `get_function_callers` | Get all functions that call this function |
+| `get_function_callees` | Get all functions called by this function |
+| `get_strings_in_function` | Get all string literals referenced in function |
+| `get_function_bytes` | Get raw bytes from function entry point |
+
+## Memory & Data Analysis
+
+| Tool | Description |
+|------|-------------|
+| `get_bytes_at` | Read raw bytes at any address |
+| `get_data_at` | Get defined data at address (arrays, structs, etc) |
+| `get_type_at` | Get type information at address (data or function) |
+| `get_containing_block` | Get memory block info (permissions, section, size) |
+| `get_references` | Get all references to specified address |
+
+## Search
+
+| Tool | Description |
+|------|-------------|
+| `search_functions_by_name` | Search for functions by name substring |
+| `search_strings` | Search for strings in program |
+| `search_bytes` | Search for byte patterns (hex, ? wildcards) |
+| `search_for_value` | Search for hex value in all defined data |
+
+## Renaming & Modification
+
+| Tool | Description |
+|------|-------------|
+| `rename_function` | Rename function by name |
+| `rename_function_by_address` | Rename function by address |
+| `rename_data` | Rename data label at address |
+| `rename_variable` | Rename local variable within function |
+| `patch_bytes` | Patch bytes at address (hex) |
+| `set_function_prototype` | Set function's prototype |
+| `set_local_variable_type` | Set local variable's type |
+| `set_decompiler_comment` | Set comment in function pseudocode |
+| `set_disassembly_comment` | Set comment in function disassembly |
+
+## Export
+
+| Tool | Description |
+|------|-------------|
+| `export_binary` | Export entire binary to file |
+
 # Installation
 
 ## Prerequisites
@@ -48,7 +128,7 @@ https://github.com/user-attachments/assets/75f0c176-6da1-48dc-ad96-c182eb4648c3
 
 ## MCP Clients
 
-Theoretically, any MCP client should work with ghidraMCP.  Three examples are given below.
+Theoretically, any MCP client should work with ghidraMCP.  Two examples are given below.
 
 ## Example 1: Claude Desktop
 To set up Claude Desktop as a Ghidra MCP client, go to `Claude` -> `Settings` -> `Developer` -> `Edit Config` -> `claude_desktop_config.json` and add the following:
@@ -99,16 +179,7 @@ Another MCP client that supports multiple models on the backend is [5ire](https:
 3. Command: `python /ABSOLUTE_PATH_TO/bridge_mcp_ghidra.py`
 
 # Building from Source
-1. Copy the following files from your Ghidra directory to this project's `lib/` directory:
-- `Ghidra/Features/Base/lib/Base.jar`
-- `Ghidra/Features/Decompiler/lib/Decompiler.jar`
-- `Ghidra/Framework/Docking/lib/Docking.jar`
-- `Ghidra/Framework/Generic/lib/Generic.jar`
-- `Ghidra/Framework/Project/lib/Project.jar`
-- `Ghidra/Framework/SoftwareModeling/lib/SoftwareModeling.jar`
-- `Ghidra/Framework/Utility/lib/Utility.jar`
-- `Ghidra/Framework/Gui/lib/Gui.jar`
-2. Build with Maven by running:
+Build with Maven by running:
 
 `mvn clean package assembly:single`
 
