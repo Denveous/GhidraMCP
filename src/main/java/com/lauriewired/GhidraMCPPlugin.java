@@ -9,6 +9,10 @@ import ghidra.app.plugin.PluginCategoryNames;
 import ghidra.app.services.ProgramManager;
 import ghidra.app.services.CodeViewerService;
 import ghidra.program.util.ProgramLocation;
+import ghidra.framework.model.Project;
+import ghidra.framework.model.ProjectData;
+import ghidra.framework.model.DomainFile;
+import ghidra.framework.model.DomainFolder;
 import ghidra.framework.options.Options;
 import ghidra.framework.plugintool.Plugin;
 import ghidra.framework.plugintool.PluginInfo;
@@ -473,6 +477,16 @@ public class GhidraMCPPlugin extends Plugin {
 			Map<String, String> qparams = parseQueryParams(exchange);
 			String addressStr = qparams.get("address");
 			sendResponse(exchange, getEquates(addressStr));
+		});
+
+		server.createContext("/get_open_programs", exchange -> {
+			sendResponse(exchange, getOpenPrograms());
+		});
+
+		server.createContext("/switch_program", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String programPath = qparams.get("path");
+			sendResponse(exchange, switchProgram(programPath));
 		});
 
 		server.setExecutor(null);
@@ -2241,6 +2255,104 @@ public class GhidraMCPPlugin extends Plugin {
 			return gson.toJson(results);
 		} catch (Exception e) {
 			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getOpenPrograms() {
+		try {
+			Project project = tool.getProject();
+			if (project == null) return "Error: No project open";
+
+			ProjectData projectData = project.getProjectData();
+			if (projectData == null) return "Error: No project data";
+
+			List<Map<String, String>> programs = new ArrayList<>();
+			Program currentProgram = getCurrentProgram();
+
+			// Get all domain files in the project root folder recursively
+			List<DomainFile> allFiles = new ArrayList<>();
+			collectDomainFiles(projectData.getRootFolder(), allFiles);
+
+			for (DomainFile df : allFiles) {
+				Map<String, String> info = new HashMap<>();
+				info.put("path", df.getPathname());
+				info.put("name", df.getName());
+
+				// Check if this file is currently open
+				boolean isOpen = false;
+				boolean isCurrent = false;
+				String execPath = "";
+
+				ProgramManager programManager = tool.getService(ProgramManager.class);
+				Program[] openPrograms = programManager.getAllOpenPrograms();
+
+				for (Program p : openPrograms) {
+					if (p.getDomainFile() != null && p.getDomainFile().equals(df)) {
+						isOpen = true;
+						execPath = p.getExecutablePath();
+						isCurrent = p.equals(currentProgram);
+						break;
+					}
+				}
+
+				info.put("current", String.valueOf(isCurrent));
+				info.put("open", String.valueOf(isOpen));
+				info.put("executablePath", execPath);
+				programs.add(info);
+			}
+
+			return gson.toJson(programs);
+		} catch (Exception e) {
+			return "Error: " + e.getClass().getName() + ": " + e.getMessage();
+		}
+	}
+
+	private void collectDomainFiles(DomainFolder folder, List<DomainFile> list) {
+		for (DomainFile df : folder.getFiles()) {
+			list.add(df);
+		}
+		for (DomainFolder subfolder : folder.getFolders()) {
+			collectDomainFiles(subfolder, list);
+		}
+	}
+
+	private String switchProgram(String programPath) {
+		try {
+			Project project = tool.getProject();
+			if (project == null) return "Error: No project open";
+
+			ProjectData projectData = project.getProjectData();
+			if (projectData == null) return "Error: No project data";
+
+			ProgramManager programManager = tool.getService(ProgramManager.class);
+
+			// First check if already open
+			Program[] openPrograms = programManager.getAllOpenPrograms();
+			for (Program p : openPrograms) {
+				DomainFile df = p.getDomainFile();
+				String path = df != null ? df.getPathname() : p.getExecutablePath();
+				if (path.equals(programPath) || p.getName().equals(programPath) || (df != null && df.getPathname().equals(programPath))) {
+					programManager.setCurrentProgram(p);
+					return "Switched to: " + programPath;
+				}
+			}
+
+			// If not open, find and open it
+			List<DomainFile> allFiles = new ArrayList<>();
+			collectDomainFiles(projectData.getRootFolder(), allFiles);
+
+			for (DomainFile df : allFiles) {
+				if (df.getPathname().equals(programPath) || df.getName().equals(programPath)) {
+					Program p = programManager.openProgram(df);
+					if (p != null) {
+						return "Opened and switched to: " + programPath;
+					}
+				}
+			}
+
+			return "Error: Program not found: " + programPath;
+		} catch (Exception e) {
+			return "Error: " + e.getClass().getName() + ": " + e.getMessage();
 		}
 	}
 
