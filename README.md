@@ -23,7 +23,7 @@ MCP Server + Ghidra Plugin
 
 # MCP Tools
 
-ghidraMCP exposes 59 tools through MCP for LLM-assisted reverse engineering:
+ghidraMCP exposes 73 tools through MCP for LLM-assisted reverse engineering:
 
 ## Listing & Navigation
 
@@ -42,6 +42,7 @@ ghidraMCP exposes 59 tools through MCP for LLM-assisted reverse engineering:
 | `get_entry_points` | Get all entry points (external symbols) |
 | `get_open_programs` | List all programs in the current Ghidra project (open and available) |
 | `switch_program` | Switch active program or open a new program from the project |
+| `get_external_functions` | List all external/imported functions with pagination |
 
 ## Decompilation & Disassembly
 
@@ -92,6 +93,12 @@ ghidraMCP exposes 59 tools through MCP for LLM-assisted reverse engineering:
 | `get_section_info` | Get PE/ELF section details |
 | `get_data_access` | Get data accessed by function |
 | `get_stack_strings` | Detect stack-allocated strings |
+| `list_data_types` | List all defined structs, enums, and data types with pagination |
+| `get_struct_fields` | Get fields of a struct by name |
+| `get_enum_values` | Get values of an enum by name |
+| `get_symbols_at` | Get all symbols at an address |
+| `compare_memory` | Compare two memory regions and return differences |
+| `get_references_count` | Get count of references to an address, categorized by type |
 
 ## Search
 
@@ -101,6 +108,7 @@ ghidraMCP exposes 59 tools through MCP for LLM-assisted reverse engineering:
 | `search_strings` | Search for strings in program |
 | `search_bytes` | Search for byte patterns (hex, ? wildcards) |
 | `search_for_value` | Search for hex value in all defined data |
+| `get_code_units_in_range` | Get all instructions and data in address range |
 
 ## Renaming & Modification
 

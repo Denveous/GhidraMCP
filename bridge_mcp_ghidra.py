@@ -45,7 +45,7 @@ def safe_get(endpoint: str, params: dict = None) -> list:
 def safe_post(endpoint: str, data: dict | str) -> str:
     try:
         if isinstance(data, dict):
-            response = requests.post(f"{ghidra_server_url}/{endpoint}", data=data, timeout=5)
+            response = requests.post(f"{ghidra_server_url}/{endpoint}", json=data, timeout=5)
         else:
             response = requests.post(f"{ghidra_server_url}/{endpoint}", data=data.encode("utf-8"), timeout=5)
         response.encoding = 'utf-8'
@@ -58,7 +58,7 @@ def safe_post(endpoint: str, data: dict | str) -> str:
 
 def safe_post_json(endpoint: str, data: dict) -> dict:
     try:
-        response = requests.post(f"{ghidra_server_url}/{endpoint}", data=data, timeout=5)
+        response = requests.post(f"{ghidra_server_url}/{endpoint}", json=data, timeout=5)
         response.encoding = 'utf-8'
         if response.ok:
             import json
