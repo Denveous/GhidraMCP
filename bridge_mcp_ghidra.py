@@ -410,6 +410,251 @@ def search_for_value(value: str) -> list:
     """
     return safe_get("search_for_value", {"value": value})
 
+@mcp.tool()
+def get_xrefs_to(address: str) -> list:
+    """
+    Get detailed cross-references TO the specified address.
+    Returns list with from, type, operator, function for each xref.
+    """
+    import json
+    response = safe_get("get_xrefs_to", {"address": address})
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return []
+
+@mcp.tool()
+def get_xrefs_from(address: str) -> list:
+    """
+    Get cross-references FROM the specified address.
+    Returns list with to, type, operator for each xref.
+    """
+    import json
+    response = safe_get("get_xrefs_from", {"address": address})
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return []
+
+@mcp.tool()
+def get_function_body(address: str) -> dict:
+    """
+    Get address range of function body.
+    Returns dict with min_address, max_address, num_addresses, ranges.
+    """
+    import json
+    response = safe_get("get_function_body", {"address": address})
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return {"error": "No function at address"}
+
+@mcp.tool()
+def get_function_signature(address: str) -> dict:
+    """
+    Get full calling convention signature of function.
+    Returns dict with signature, calling_convention, return_type, varargs, name, entry.
+    """
+    import json
+    response = safe_get("get_function_signature", {"address": address})
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return {"error": "No function at address"}
+
+@mcp.tool()
+def get_stack_frame(address: str) -> dict:
+    """
+    Get stack frame size/layout info for function.
+    Returns dict with stack_size, local_size, param_size, return_addr_size, locals, parameters.
+    """
+    import json
+    response = safe_get("get_stack_frame", {"address": address})
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return {"error": "No function at address"}
+
+@mcp.tool()
+def get_function_complexity(address: str) -> dict:
+    """
+    Get cyclomatic complexity of function.
+    Returns dict with cyclomatic_complexity, branches, instructions.
+    """
+    import json
+    response = safe_get("get_function_complexity", {"address": address})
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return {"error": "No function at address"}
+
+@mcp.tool()
+def get_instruction_at(address: str) -> dict:
+    """
+    Get single instruction at address.
+    Returns dict with address, bytes, mnemonic, operands, length.
+    """
+    import json
+    response = safe_get("get_instruction_at", {"address": address})
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return {"error": "No instruction at address"}
+
+@mcp.tool()
+def get_instructions_in_range(start: str, end: str) -> str:
+    """
+    Get list of instructions in address range.
+    Returns assembly with bytes and instructions.
+    """
+    return "\n".join(safe_get("get_instructions_in_range", {"start": start, "end": end}))
+
+@mcp.tool()
+def get_basic_blocks(address: str) -> list:
+    """
+    Get basic blocks for CFG analysis of function.
+    Returns list of blocks with start and size for each.
+    """
+    import json
+    response = safe_get("get_basic_blocks", {"address": address})
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return []
+
+@mcp.tool()
+def get_control_flow_graph(address: str) -> dict:
+    """
+    Get control flow graph (CFG) of function.
+    Returns dict with function name, nodes, and edges.
+    """
+    import json
+    response = safe_get("get_control_flow_graph", {"address": address})
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return {"error": "No function at address"}
+
+@mcp.tool()
+def get_memory_map() -> list:
+    """
+    Get full memory map with permissions.
+    Returns list of memory blocks with name, start, end, size, permissions, etc.
+    """
+    import json
+    response = safe_get("get_memory_map")
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return []
+
+@mcp.tool()
+def get_section_info() -> list:
+    """
+    Get PE/ELF section details.
+    Returns list of sections with name, start, end, size, permissions.
+    """
+    import json
+    response = safe_get("get_section_info")
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return []
+
+@mcp.tool()
+def get_stack_strings(address: str) -> list:
+    """
+    Detect stack-allocated strings in function.
+    Returns list of string variables with offset and type.
+    """
+    return safe_get("get_stack_strings", {"address": address})
+
+@mcp.tool()
+def get_data_access(address: str) -> list:
+    """
+    Get data accessed by function.
+    Returns list of addresses with labels and types.
+    """
+    return safe_get("get_data_access", {"address": address})
+
+@mcp.tool()
+def get_bookmarks() -> list:
+    """
+    Get all bookmarks in program.
+    Returns list with address, type, category, comment for each.
+    """
+    import json
+    response = safe_get("get_bookmarks")
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return []
+
+@mcp.tool()
+def get_equates(address: str) -> list:
+    """
+    Get equate tables for values at address.
+    Returns list with name, value, operand_index for each equate.
+    """
+    import json
+    response = safe_get("get_equates", {"address": address})
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return []
+
 def main():
     parser = argparse.ArgumentParser(description="MCP server for Ghidra")
     parser.add_argument("--ghidra-server", type=str, default=DEFAULT_GHIDRA_SERVER,

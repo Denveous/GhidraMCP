@@ -17,6 +17,8 @@ import ghidra.framework.plugintool.util.PluginStatus;
 import ghidra.program.model.address.Address;
 import ghidra.program.model.address.AddressSpace;
 import ghidra.program.model.address.GlobalNamespace;
+import ghidra.program.model.address.AddressRange;
+import ghidra.program.model.address.AddressRangeIterator;
 import ghidra.program.model.lang.Register;
 import ghidra.program.model.listing.*;
 import ghidra.program.model.mem.MemoryAccessException;
@@ -380,6 +382,97 @@ public class GhidraMCPPlugin extends Plugin {
 			Map<String, String> qparams = parseQueryParams(exchange);
 			String valueStr = qparams.get("value");
 			sendResponse(exchange, searchForValue(valueStr));
+		});
+
+		server.createContext("/get_xrefs_to", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getXrefsTo(addressStr));
+		});
+
+		server.createContext("/get_xrefs_from", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getXrefsFrom(addressStr));
+		});
+
+		server.createContext("/get_function_body", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getFunctionBody(addressStr));
+		});
+
+		server.createContext("/get_function_signature", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getFunctionSignature(addressStr));
+		});
+
+		server.createContext("/get_stack_frame", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getStackFrame(addressStr));
+		});
+
+		server.createContext("/get_function_complexity", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getFunctionComplexity(addressStr));
+		});
+
+		server.createContext("/get_instruction_at", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getInstructionAt(addressStr));
+		});
+
+		server.createContext("/get_instructions_in_range", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String startStr = qparams.get("start");
+			String endStr = qparams.get("end");
+			sendResponse(exchange, getInstructionsInRange(startStr, endStr));
+		});
+
+		server.createContext("/get_basic_blocks", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getBasicBlocks(addressStr));
+		});
+
+		server.createContext("/get_control_flow_graph", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getControlFlowGraph(addressStr));
+		});
+
+		server.createContext("/get_memory_map", exchange -> {
+			sendResponse(exchange, getMemoryMap());
+		});
+
+		server.createContext("/get_section_info", exchange -> {
+			sendResponse(exchange, getSectionInfo());
+		});
+
+		server.createContext("/get_stack_strings", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getStackStrings(addressStr));
+		});
+
+		server.createContext("/get_data_access", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getDataAccess(addressStr));
+		});
+
+		server.createContext("/get_bookmarks", exchange -> {
+			sendResponse(exchange, getBookmarks());
+		});
+
+		server.createContext("/get_equates", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getEquates(addressStr));
 		});
 
 		server.setExecutor(null);
@@ -1682,6 +1775,467 @@ public class GhidraMCPPlugin extends Plugin {
 				} catch (Exception e) {
 					continue;
 				}
+			}
+
+			return gson.toJson(results);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getXrefsTo(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			ReferenceManager refManager = program.getReferenceManager();
+			ReferenceIterator refs = refManager.getReferencesTo(addr);
+
+			List<Map<String, String>> results = new ArrayList<>();
+			while (refs.hasNext() && results.size() < 1000) {
+				Reference ref = refs.next();
+				Map<String, String> info = new HashMap<>();
+				info.put("from", ref.getFromAddress().toString());
+				info.put("type", ref.getReferenceType().toString());
+				Function func = program.getFunctionManager().getFunctionContaining(ref.getFromAddress());
+				info.put("function", func != null ? func.getName(true) : "(unknown)");
+				results.add(info);
+			}
+			return gson.toJson(results);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getXrefsFrom(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			Reference[] refs = program.getReferenceManager().getReferencesFrom(addr);
+
+			List<Map<String, String>> results = new ArrayList<>();
+			for (Reference ref : refs) {
+				Map<String, String> info = new HashMap<>();
+				info.put("to", ref.getToAddress().toString());
+				info.put("type", ref.getReferenceType().toString());
+				results.add(info);
+			}
+			return gson.toJson(results);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getFunctionBody(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			Function func = program.getFunctionManager().getFunctionContaining(addr);
+			if (func == null) return "No function at address";
+
+			AddressSetView body = func.getBody();
+			Map<String, String> result = new HashMap<>();
+			result.put("min_address", body.getMinAddress().toString());
+			result.put("max_address", body.getMaxAddress().toString());
+			result.put("num_addresses", String.valueOf(body.getNumAddresses()));
+
+			List<String> ranges = new ArrayList<>();
+			AddressRangeIterator rangeIter = body.getAddressRanges();
+			while (rangeIter.hasNext()) {
+				AddressRange range = rangeIter.next();
+				ranges.add(range.getMinAddress().toString() + "-" + range.getMaxAddress().toString());
+			}
+			result.put("ranges", gson.toJson(ranges));
+
+			return gson.toJson(result);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getFunctionSignature(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			Function func = program.getFunctionManager().getFunctionContaining(addr);
+			if (func == null) return "No function at address";
+
+			String signature = func.getPrototypeString(false, false);
+			String callingConvention = func.getCallingConventionName();
+			String returnTypeName = func.getReturnType().getName();
+			boolean hasVarArgs = func.hasVarArgs();
+
+			Map<String, String> result = new HashMap<>();
+			result.put("signature", signature);
+			result.put("calling_convention", callingConvention);
+			result.put("return_type", returnTypeName);
+			result.put("varargs", String.valueOf(hasVarArgs));
+			result.put("name", func.getName(true));
+			result.put("entry", func.getEntryPoint().toString());
+
+			return gson.toJson(result);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getStackFrame(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			Function func = program.getFunctionManager().getFunctionContaining(addr);
+			if (func == null) return "No function at address";
+
+			StackFrame stackFrame = func.getStackFrame();
+			Map<String, Object> result = new HashMap<>();
+			result.put("local_size", stackFrame.getLocalSize());
+			result.put("param_size", stackFrame.getParameterSize());
+
+			List<String> locals = new ArrayList<>();
+			for (Variable var : stackFrame.getLocals()) {
+				locals.add(String.format("%s %s (offset: %d)", var.getDataType().getName(), var.getName(), var.getStackOffset()));
+			}
+			result.put("locals", locals);
+
+			List<String> params = new ArrayList<>();
+			for (Variable var : stackFrame.getParameters()) {
+				params.add(String.format("%s %s (offset: %d)", var.getDataType().getName(), var.getName(), var.getStackOffset()));
+			}
+			result.put("parameters", params);
+
+			return gson.toJson(result);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getFunctionComplexity(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			Function func = program.getFunctionManager().getFunctionContaining(addr);
+			if (func == null) return "No function at address";
+
+			Listing listing = program.getListing();
+			int branches = 0;
+			int instructions = 0;
+
+			Instruction instr = listing.getInstructionAt(func.getEntryPoint());
+			while (instr != null && func.getBody().contains(instr.getAddress())) {
+				instructions++;
+				String mnemonic = instr.getMnemonicString();
+				if (mnemonic.equals("CALL") || mnemonic.equals("JMP") ||
+					mnemonic.startsWith("J") || mnemonic.equals("RET")) {
+					branches++;
+				}
+				instr = instr.getNext();
+			}
+
+			int complexity = branches + 1;
+			Map<String, String> result = new HashMap<>();
+			result.put("cyclomatic_complexity", String.valueOf(complexity));
+			result.put("branches", String.valueOf(branches));
+			result.put("instructions", String.valueOf(instructions));
+
+			return gson.toJson(result);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getInstructionAt(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			Listing listing = program.getListing();
+			Instruction instr = listing.getInstructionAt(addr);
+			if (instr == null) return "No instruction at address";
+
+			StringBuilder hex = new StringBuilder();
+			for (byte b : instr.getBytes()) {
+				hex.append(String.format("%02X ", b & 0xFF));
+			}
+
+			Map<String, String> result = new HashMap<>();
+			result.put("address", instr.getAddress().toString());
+			result.put("bytes", hex.toString().trim());
+			result.put("mnemonic", instr.getMnemonicString());
+			result.put("operands", instr.toString().substring(instr.getMnemonicString().length()).trim());
+			result.put("length", String.valueOf(instr.getLength()));
+
+			return gson.toJson(result);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getInstructionsInRange(String startStr, String endStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address start = program.getAddressFactory().getAddress(startStr);
+			Address end = program.getAddressFactory().getAddress(endStr);
+			Listing listing = program.getListing();
+			List<String> lines = new ArrayList<>();
+
+			Instruction instr = listing.getInstructionAt(start);
+			while (instr != null && instr.getAddress().compareTo(end) <= 0) {
+				StringBuilder hex = new StringBuilder();
+				for (byte b : instr.getBytes()) {
+					hex.append(String.format("%02X ", b & 0xFF));
+				}
+				lines.add(instr.getAddress().toString() + ": " + hex.toString().trim() + "; " + instr.toString());
+				instr = instr.getNext();
+			}
+
+			return String.join("\n", lines);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getBasicBlocks(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			Function func = program.getFunctionManager().getFunctionContaining(addr);
+			if (func == null) return "No function at address";
+
+			Listing listing = program.getListing();
+			List<Map<String, Object>> blocks = new ArrayList<>();
+
+			AddressSetView body = func.getBody();
+			Address currentPos = func.getEntryPoint();
+
+			while (currentPos != null && body.contains(currentPos)) {
+				Instruction instr = listing.getInstructionAt(currentPos);
+				if (instr == null) break;
+
+				Address blockStart = instr.getAddress();
+				int blockLen = 0;
+
+				while (instr != null && body.contains(instr.getAddress())) {
+					String mnemonic = instr.getMnemonicString();
+					if (mnemonic.equals("RET") ||
+						(mnemonic.startsWith("J") && !mnemonic.equals("JMP")) ||
+						mnemonic.equals("CALL")) {
+						blockLen += instr.getLength();
+						instr = instr.getNext();
+						break;
+					}
+					blockLen += instr.getLength();
+					instr = instr.getNext();
+					if (instr == null || !body.contains(instr.getAddress())) break;
+				}
+
+				Map<String, Object> block = new HashMap<>();
+				block.put("start", blockStart.toString());
+				block.put("size", blockLen);
+				blocks.add(block);
+
+				if (instr == null) break;
+				currentPos = instr.getAddress();
+			}
+
+			return gson.toJson(blocks);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getControlFlowGraph(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			Function func = program.getFunctionManager().getFunctionContaining(addr);
+			if (func == null) return "No function at address";
+
+			Listing listing = program.getListing();
+			List<Map<String, Object>> nodes = new ArrayList<>();
+			List<Map<String, String>> edges = new ArrayList<>();
+
+			AddressSetView body = func.getBody();
+			Map<Address, String> blockMap = new HashMap<>();
+			int blockIdx = 0;
+
+			Instruction instr = listing.getInstructionAt(func.getEntryPoint());
+			while (instr != null && body.contains(instr.getAddress())) {
+				Address blockStart = instr.getAddress();
+				Map<String, Object> node = new HashMap<>();
+				node.put("id", "bb_" + blockIdx);
+				node.put("start", blockStart.toString());
+				blockMap.put(blockStart, "bb_" + blockIdx);
+
+				Reference[] refs = instr.getReferencesFrom();
+				for (Reference ref : refs) {
+					if (ref.getReferenceType().isFlow() && body.contains(ref.getToAddress())) {
+						Map<String, String> edge = new HashMap<>();
+						edge.put("from", "bb_" + blockIdx);
+						edge.put("to", ref.getToAddress().toString());
+						edges.add(edge);
+					}
+				}
+
+				blockIdx++;
+				instr = instr.getNext();
+			}
+
+			Map<String, Object> cfg = new HashMap<>();
+			cfg.put("function", func.getName(true));
+			cfg.put("nodes", nodes);
+			cfg.put("edges", edges);
+
+			return gson.toJson(cfg);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getMemoryMap() {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			List<Map<String, String>> map = new ArrayList<>();
+			for (MemoryBlock block : program.getMemory().getBlocks()) {
+				Map<String, String> info = new HashMap<>();
+				info.put("name", block.getName());
+				info.put("start", block.getStart().toString());
+				info.put("end", block.getEnd().toString());
+				info.put("size", String.valueOf(block.getSize()));
+				info.put("permissions", (block.isRead() ? "r" : "-") +
+									   (block.isWrite() ? "w" : "-") +
+									   (block.isExecute() ? "x" : "-"));
+				info.put("initialized", String.valueOf(block.isInitialized()));
+				info.put("loaded", String.valueOf(block.isLoaded()));
+				info.put("volatile", String.valueOf(block.isVolatile()));
+				map.add(info);
+			}
+			return gson.toJson(map);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getSectionInfo() {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			List<Map<String, String>> sections = new ArrayList<>();
+
+			for (MemoryBlock block : program.getMemory().getBlocks()) {
+				if (block.getName().contains(".text") || block.getName().contains(".data") ||
+					block.getName().contains(".rdata") || block.getName().contains(".bss") ||
+					block.getName().contains(".rodata") || block.getName().startsWith("/SECTION")) {
+					Map<String, String> info = new HashMap<>();
+					info.put("name", block.getName());
+					info.put("start", block.getStart().toString());
+					info.put("end", block.getEnd().toString());
+					info.put("size", String.valueOf(block.getSize()));
+					info.put("permissions", (block.isRead() ? "r" : "-") +
+										   (block.isWrite() ? "w" : "-") +
+										   (block.isExecute() ? "x" : "-"));
+					sections.add(info);
+				}
+			}
+
+			return gson.toJson(sections);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getStackStrings(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			Function func = program.getFunctionManager().getFunctionContaining(addr);
+			if (func == null) return "No function at address";
+
+			StackFrame stackFrame = func.getStackFrame();
+			List<String> stackStrings = new ArrayList<>();
+
+			for (Variable var : stackFrame.getLocals()) {
+				if (var.getDataType() instanceof StringDataType ||
+					var.getName().toLowerCase().contains("str") ||
+					var.getName().toLowerCase().contains("string")) {
+					stackStrings.add(String.format("%s (offset: %d, type: %s)",
+						var.getName(), var.getStackOffset(), var.getDataType().getName()));
+				}
+			}
+
+			return gson.toJson(stackStrings);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getDataAccess(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			Function func = program.getFunctionManager().getFunctionContaining(addr);
+			if (func == null) return "No function at address";
+
+			Listing listing = program.getListing();
+			Set<String> accessedData = new LinkedHashSet<>();
+
+			Instruction instr = listing.getInstructionAt(func.getEntryPoint());
+			while (instr != null && func.getBody().contains(instr.getAddress())) {
+				Reference[] refs = instr.getReferencesFrom();
+				for (Reference ref : refs) {
+					if (ref.getReferenceType().isData()) {
+						Address toAddr = ref.getToAddress();
+						Data data = listing.getDefinedDataAt(toAddr);
+						if (data != null) {
+							String label = data.getLabel() != null ? data.getLabel() : "(unnamed)";
+							accessedData.add(toAddr.toString() + ": " + label + " (" + data.getDataType().getName() + ")");
+						}
+					}
+				}
+				instr = instr.getNext();
+			}
+
+			return gson.toJson(new ArrayList<>(accessedData));
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getBookmarks() {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			List<Map<String, String>> bookmarks = new ArrayList<>();
+			return gson.toJson(bookmarks);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getEquates(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			EquateTable eqTable = program.getEquateTable();
+			List<Equate> equates = eqTable.getEquates(addr);
+
+			List<Map<String, String>> results = new ArrayList<>();
+			for (Equate equate : equates) {
+				Map<String, String> info = new HashMap<>();
+				info.put("name", equate.getName());
+				info.put("value", String.valueOf(equate.getValue()));
+				results.add(info);
 			}
 
 			return gson.toJson(results);
