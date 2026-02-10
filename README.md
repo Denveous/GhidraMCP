@@ -23,7 +23,7 @@ MCP Server + Ghidra Plugin
 
 # MCP Tools
 
-ghidraMCP exposes 41 tools through MCP for LLM-assisted reverse engineering:
+ghidraMCP exposes 57 tools through MCP for LLM-assisted reverse engineering:
 
 ## Listing & Navigation
 
@@ -49,6 +49,8 @@ ghidraMCP exposes 41 tools through MCP for LLM-assisted reverse engineering:
 | `decompile_function_by_address` | Decompile function at address to C code |
 | `disassemble_function` | Get assembly code for a function |
 | `disassemble_range` | Disassemble address range (start to end) |
+| `get_instruction_at` | Get single instruction at address (bytes, mnemonic, operands) |
+| `get_instructions_in_range` | Get list of instructions in address range |
 
 ## Function Analysis
 
@@ -61,6 +63,19 @@ ghidraMCP exposes 41 tools through MCP for LLM-assisted reverse engineering:
 | `get_function_callees` | Get all functions called by this function |
 | `get_strings_in_function` | Get all string literals referenced in function |
 | `get_function_bytes` | Get raw bytes from function entry point |
+| `get_function_body` | Get address range of function body |
+| `get_function_signature` | Get full calling convention signature |
+| `get_stack_frame` | Get stack frame size/layout info |
+| `get_function_complexity` | Get cyclomatic complexity |
+| `get_basic_blocks` | Get basic blocks for CFG analysis |
+| `get_control_flow_graph` | Get control flow graph (CFG) |
+
+## XREF Analysis
+
+| Tool | Description |
+|------|-------------|
+| `get_xrefs_to` | Get detailed cross-references TO address |
+| `get_xrefs_from` | Get cross-references FROM address |
 
 ## Memory & Data Analysis
 
@@ -71,6 +86,10 @@ ghidraMCP exposes 41 tools through MCP for LLM-assisted reverse engineering:
 | `get_type_at` | Get type information at address (data or function) |
 | `get_containing_block` | Get memory block info (permissions, section, size) |
 | `get_references` | Get all references to specified address |
+| `get_memory_map` | Get full memory map with permissions |
+| `get_section_info` | Get PE/ELF section details |
+| `get_data_access` | Get data accessed by function |
+| `get_stack_strings` | Detect stack-allocated strings |
 
 ## Search
 
@@ -94,6 +113,13 @@ ghidraMCP exposes 41 tools through MCP for LLM-assisted reverse engineering:
 | `set_local_variable_type` | Set local variable's type |
 | `set_decompiler_comment` | Set comment in function pseudocode |
 | `set_disassembly_comment` | Set comment in function disassembly |
+
+## Bookmarks & Equates
+
+| Tool | Description |
+|------|-------------|
+| `get_bookmarks` | Get all bookmarks in program |
+| `get_equates` | Get equate tables for values at address |
 
 ## Export
 
