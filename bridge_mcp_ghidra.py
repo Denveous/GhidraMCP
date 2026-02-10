@@ -7,6 +7,7 @@
 # ///
 
 import sys
+import json
 import requests
 import argparse
 import logging
@@ -680,6 +681,82 @@ def switch_program(path: str) -> str:
     Returns confirmation message.
     """
     return "\n".join(safe_get("switch_program", {"path": path}))
+
+@mcp.tool()
+def list_data_types(offset: int = 0, limit: int = 100) -> list:
+    """List all defined structs, enums, and data types with pagination."""
+    return safe_get("list_data_types", {"offset": offset, "limit": limit})
+
+@mcp.tool()
+def get_struct_fields(structName: str) -> list:
+    """Get fields of a struct by name."""
+    return safe_get("get_struct_fields", {"structName": structName})
+
+@mcp.tool()
+def get_enum_values(enumName: str) -> list:
+    """Get values of an enum by name."""
+    return safe_get("get_enum_values", {"enumName": enumName})
+
+@mcp.tool()
+def get_symbols_at(address: str) -> list:
+    """Get all symbols at an address."""
+    return safe_get("get_symbols_at", {"address": address})
+
+@mcp.tool()
+def get_external_functions(offset: int = 0, limit: int = 100) -> list:
+    """List all external/imported functions."""
+    return safe_get("get_external_functions", {"offset": offset, "limit": limit})
+
+@mcp.tool()
+def get_decompiler_comment(address: str) -> str:
+    """Get comment from decompiler view at address."""
+    return "\n".join(safe_get("get_decompiler_comment", {"address": address}))
+
+@mcp.tool()
+def get_disassembly_comment(address: str) -> str:
+    """Get comment from listing view at address."""
+    return "\n".join(safe_get("get_disassembly_comment", {"address": address}))
+
+@mcp.tool()
+def get_references_count(address: str) -> dict:
+    """Get count of references to an address, categorized by type."""
+    response = safe_get("get_references_count", {"address": address})
+    return json.loads("\n".join(response)) if response else {}
+
+@mcp.tool()
+def get_code_units_in_range(start: str, end: str) -> list:
+    """Get all instructions and data in address range."""
+    return safe_get("get_code_units_in_range", {"start": start, "end": end})
+
+@mcp.tool()
+def compare_memory(address1: str, address2: str, length: int) -> list:
+    """Compare two memory regions and return differences."""
+    return safe_get("compare_memory", {"address1": address1, "address2": address2, "length": length})
+
+@mcp.tool()
+def create_function(address: str, functionName: str) -> str:
+    """Define a new function at address."""
+    return safe_post("create_function", {"address": address, "functionName": functionName})
+
+@mcp.tool()
+def delete_function(address: str) -> str:
+    """Undefine function at address."""
+    return safe_post("delete_function", {"address": address})
+
+@mcp.tool()
+def add_bookmark(address: str, category: str, description: str) -> str:
+    """Add bookmark at address."""
+    return safe_post("add_bookmark", {"address": address, "category": category, "description": description})
+
+@mcp.tool()
+def remove_bookmark(address: str) -> str:
+    """Remove bookmark at address."""
+    return safe_post("remove_bookmark", {"address": address})
+
+@mcp.tool()
+def run_auto_analysis() -> str:
+    """Trigger Ghidra's auto-analysis on current program."""
+    return safe_post("run_auto_analysis", {})
 
 def main():
     parser = argparse.ArgumentParser(description="MCP server for Ghidra")

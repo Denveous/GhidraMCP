@@ -44,6 +44,8 @@ import ghidra.program.model.data.StringDataType;
 import ghidra.program.model.data.DataType;
 import ghidra.util.Msg;
 import ghidra.util.task.ConsoleTaskMonitor;
+import ghidra.program.model.listing.BookmarkManager;
+import ghidra.program.model.listing.Bookmark;
 
 import javax.swing.*;
 import java.io.IOException;
@@ -487,6 +489,118 @@ public class GhidraMCPPlugin extends Plugin {
 			Map<String, String> qparams = parseQueryParams(exchange);
 			String programPath = qparams.get("path");
 			sendResponse(exchange, switchProgram(programPath));
+		});
+
+		server.createContext("/list_data_types", exchange -> {
+			Map<String,String> qparams = parseQueryParams(exchange);
+			int offset = Integer.parseInt(qparams.getOrDefault("offset", "0"));
+			int limit = Integer.parseInt(qparams.getOrDefault("limit", "100"));
+			sendResponse(exchange, listDataTypes(offset, limit));
+		});
+
+		server.createContext("/get_struct_fields", exchange -> {
+			Map<String,String> qparams = parseQueryParams(exchange);
+			String structName = qparams.get("structName");
+			sendResponse(exchange, getStructFields(structName));
+		});
+
+		server.createContext("/get_enum_values", exchange -> {
+			Map<String,String> qparams = parseQueryParams(exchange);
+			String enumName = qparams.get("enumName");
+			sendResponse(exchange, getEnumValues(enumName));
+		});
+
+		server.createContext("/get_symbols_at", exchange -> {
+			Map<String,String> qparams = parseQueryParams(exchange);
+			String address = qparams.get("address");
+			sendResponse(exchange, getSymbolsAt(address));
+		});
+
+		server.createContext("/get_external_functions", exchange -> {
+			Map<String,String> qparams = parseQueryParams(exchange);
+			int offset = Integer.parseInt(qparams.getOrDefault("offset", "0"));
+			int limit = Integer.parseInt(qparams.getOrDefault("limit", "100"));
+			sendResponse(exchange, getExternalFunctions(offset, limit));
+		});
+
+		server.createContext("/get_decompiler_comment", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getDecompilerComment(addressStr));
+		});
+
+		server.createContext("/get_disassembly_comment", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getDisassemblyComment(addressStr));
+		});
+
+		server.createContext("/get_references_count", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String addressStr = qparams.get("address");
+			sendResponse(exchange, getReferencesCount(addressStr));
+		});
+
+		server.createContext("/get_code_units_in_range", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String startStr = qparams.get("start");
+			String endStr = qparams.get("end");
+			sendResponse(exchange, getCodeUnitsInRange(startStr, endStr));
+		});
+
+		server.createContext("/compare_memory", exchange -> {
+			Map<String, String> qparams = parseQueryParams(exchange);
+			String address1Str = qparams.get("address1");
+			String address2Str = qparams.get("address2");
+			int length = parseIntOrDefault(qparams.get("length"), 32);
+			sendResponse(exchange, compareMemory(address1Str, address2Str, length));
+		});
+
+		server.createContext("/create_function", exchange -> {
+			try {
+				String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+				Map<String, String> params = gson.fromJson(body, Map.class);
+				String address = params.get("address");
+				String functionName = params.get("functionName");
+				sendResponse(exchange, createFunction(address, functionName));
+			} catch (Exception e) {
+				sendResponse(exchange, "Error: " + e.getMessage());
+			}
+		});
+
+		server.createContext("/delete_function", exchange -> {
+			try {
+				String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+				Map<String, String> params = gson.fromJson(body, Map.class);
+				String address = params.get("address");
+				sendResponse(exchange, deleteFunction(address));
+			} catch (Exception e) {
+				sendResponse(exchange, "Error: " + e.getMessage());
+			}
+		});
+
+		server.createContext("/add_bookmark", exchange -> {
+			try {
+				String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+				Map<String, String> params = gson.fromJson(body, Map.class);
+				String address = params.get("address");
+				String category = params.get("category");
+				String description = params.get("description");
+				sendResponse(exchange, addBookmark(address, category, description));
+			} catch (Exception e) {
+				sendResponse(exchange, "Error: " + e.getMessage());
+			}
+		});
+
+		server.createContext("/remove_bookmark", exchange -> {
+			try {
+				String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+				Map<String, String> params = gson.fromJson(body, Map.class);
+				String address = params.get("address");
+				sendResponse(exchange, removeBookmark(address));
+			} catch (Exception e) {
+				sendResponse(exchange, "Error: " + e.getMessage());
+			}
 		});
 
 		server.setExecutor(null);
@@ -2351,6 +2465,460 @@ public class GhidraMCPPlugin extends Plugin {
 			}
 
 			return "Error: Program not found: " + programPath;
+		} catch (Exception e) {
+			return "Error: " + e.getClass().getName() + ": " + e.getMessage();
+		}
+	}
+
+	private String listDataTypes(int offset, int limit) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			List<String> results = new ArrayList<>();
+			DataTypeManager dtm = program.getDataTypeManager();
+			Iterator<DataType> typeIter = dtm.getAllDataTypes();
+
+			int idx = 0;
+			int start = offset;
+			int count = 0;
+
+			while (typeIter.hasNext() && count < limit) {
+				DataType dt = typeIter.next();
+				if (!dt.isDeleted()) {
+					if (idx >= start && count < limit) {
+						String category = dt.getCategoryPath().getPath();
+						String size = "";
+						if (dt instanceof Structure) {
+							size = " (" + ((Structure)dt).getLength() + " bytes)";
+						} else if (dt instanceof EnumDataType) {
+							size = " (enum)";
+						}
+						results.add(category + ": " + dt.getName() + size);
+						count++;
+					}
+					idx++;
+				}
+			}
+			return gson.toJson(results);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getStructFields(String structName) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		if (structName == null || structName.isEmpty()) return "Error: structName parameter required";
+
+		try {
+			DataTypeManager dtm = program.getDataTypeManager();
+			DataType dt = dtm.getDataType(new CategoryPath("/"), structName);
+
+			if (dt == null) {
+				dt = dtm.getDataType(structName);
+			}
+
+			if (dt == null) {
+				return "Error: Structure '" + structName + "' not found";
+			}
+
+			if (!(dt instanceof Structure)) {
+				return "Error: '" + structName + "' is not a structure";
+			}
+
+			Structure struct = (Structure) dt;
+			List<Map<String, Object>> fields = new ArrayList<>();
+
+			for (DataTypeComponent component : struct.getComponents()) {
+				Map<String, Object> fieldInfo = new LinkedHashMap<>();
+				fieldInfo.put("offset", component.getOffset());
+				fieldInfo.put("name", component.getFieldName());
+				fieldInfo.put("type", component.getDataType().getName());
+				fieldInfo.put("size", component.getLength());
+				fields.add(fieldInfo);
+			}
+
+			Map<String, Object> result = new LinkedHashMap<>();
+			result.put("name", struct.getName());
+			result.put("size", struct.getLength());
+			result.put("fields", fields);
+
+			return gson.toJson(result);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getEnumValues(String enumName) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		if (enumName == null || enumName.isEmpty()) return "Error: enumName parameter required";
+
+		try {
+			DataTypeManager dtm = program.getDataTypeManager();
+			DataType dt = dtm.getDataType(new CategoryPath("/"), enumName);
+
+			if (dt == null) {
+				dt = dtm.getDataType(enumName);
+			}
+
+			if (dt == null) {
+				return "Error: Enum '" + enumName + "' not found";
+			}
+
+			if (!(dt instanceof EnumDataType)) {
+				return "Error: '" + enumName + "' is not an enum";
+			}
+
+			EnumDataType enumDt = (EnumDataType) dt;
+			List<Map<String, Object>> values = new ArrayList<>();
+
+			for (String name : enumDt.getNames()) {
+				long value = enumDt.getValue(name);
+				Map<String, Object> entry = new LinkedHashMap<>();
+				entry.put("name", name);
+				entry.put("value", value);
+				values.add(entry);
+			}
+
+			Map<String, Object> result = new LinkedHashMap<>();
+			result.put("name", enumDt.getName());
+			result.put("size", enumDt.getLength());
+			result.put("values", values);
+
+			return gson.toJson(result);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getSymbolsAt(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		if (addressStr == null || addressStr.isEmpty()) return "Error: address parameter required";
+
+		try {
+			Address address = program.getAddressFactory().getAddress(addressStr);
+			if (address == null) return "Error: Invalid address";
+
+			SymbolTable st = program.getSymbolTable();
+			Symbol[] symbols = st.getSymbols(address);
+
+			if (symbols == null || symbols.length == 0) {
+				return "No symbols found at " + addressStr;
+			}
+
+			List<Map<String, Object>> symbolList = new ArrayList<>();
+			for (Symbol s : symbols) {
+				Map<String, Object> symbolInfo = new LinkedHashMap<>();
+				symbolInfo.put("name", s.getName());
+				symbolInfo.put("type", s.getSymbolType().toString());
+				symbolInfo.put("namespace", s.getParentNamespace().getName());
+				symbolList.add(symbolInfo);
+			}
+
+			Map<String, Object> result = new LinkedHashMap<>();
+			result.put("address", addressStr);
+			result.put("symbols", symbolList);
+
+			return gson.toJson(result);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getExternalFunctions(int offset, int limit) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+
+		try {
+			List<Map<String, Object>> externals = new ArrayList<>();
+			SymbolTable st = program.getSymbolTable();
+			int count = 0;
+			int added = 0;
+
+			for (Symbol symbol : st.getExternalSymbols()) {
+				if (symbol.getSymbolType() == SymbolType.FUNCTION) {
+					if (count >= offset && added < limit) {
+						Map<String, Object> extInfo = new LinkedHashMap<>();
+						extInfo.put("name", symbol.getName());
+						extInfo.put("namespace", symbol.getParentNamespace().getName());
+						Address addr = symbol.getAddress();
+						extInfo.put("address", addr != null ? addr.toString() : "EXTERNAL");
+						externals.add(extInfo);
+						added++;
+					}
+					count++;
+					if (added >= limit) break;
+				}
+			}
+
+			Map<String, Object> result = new LinkedHashMap<>();
+			result.put("total", count);
+			result.put("offset", offset);
+			result.put("limit", limit);
+			result.put("returned", externals.size());
+			result.put("functions", externals);
+
+			return gson.toJson(result);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getDecompilerComment(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			CodeUnit cu = program.getListing().getCodeUnitAt(addr);
+			if (cu != null) {
+				String comment = cu.getComment(CodeUnit.EOL_COMMENT);
+				return comment != null ? comment : "No comment";
+			}
+			return "No code unit at address";
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getDisassemblyComment(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			CodeUnit cu = program.getListing().getCodeUnitAt(addr);
+			if (cu != null) {
+				List<String> comments = new ArrayList<>();
+				String plate = cu.getComment(CodeUnit.PLATE_COMMENT);
+				String pre = cu.getComment(CodeUnit.PRE_COMMENT);
+				String eol = cu.getComment(CodeUnit.EOL_COMMENT);
+				if (plate != null && !plate.isEmpty()) comments.add("Plate: " + plate);
+				if (pre != null && !pre.isEmpty()) comments.add("Pre: " + pre);
+				if (eol != null && !eol.isEmpty()) comments.add("EOL: " + eol);
+				return comments.isEmpty() ? "No comment" : String.join("\n", comments);
+			}
+			return "No code unit at address";
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String getReferencesCount(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return gson.toJson(Map.of("error", "No program loaded"));
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			ReferenceManager refManager = program.getReferenceManager();
+			ReferenceIterator refs = refManager.getReferencesTo(addr);
+
+			Map<String, Integer> byType = new HashMap<>();
+			int total = 0;
+			while (refs.hasNext()) {
+				Reference ref = refs.next();
+				RefType refType = ref.getReferenceType();
+				byType.put(refType.toString(), byType.getOrDefault(refType.toString(), 0) + 1);
+				total++;
+			}
+
+			Map<String, Object> result = new HashMap<>();
+			result.put("address", addr.toString());
+			result.put("total_references", total);
+			result.put("by_type", byType);
+			return gson.toJson(result);
+		} catch (Exception e) {
+			return gson.toJson(Map.of("error", e.getMessage()));
+		}
+	}
+
+	private String getCodeUnitsInRange(String startStr, String endStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address start = program.getAddressFactory().getAddress(startStr);
+			Address end = program.getAddressFactory().getAddress(endStr);
+			Listing listing = program.getListing();
+			List<String> results = new ArrayList<>();
+
+			CodeUnit cu = listing.getCodeUnitAt(start);
+			while (cu != null && cu.getAddress().compareTo(end) <= 0) {
+				String type = cu instanceof Instruction ? "Instruction" : "Data";
+				String mnem = cu instanceof Instruction ? ((Instruction)cu).getMnemonicString() : cu.toString();
+				results.add(cu.getAddress() + ": " + mnem + " (" + type + ", " + cu.getLength() + " bytes)");
+				cu = listing.getCodeUnitAfter(cu.getAddress());
+			}
+
+			return results.isEmpty() ? "No code units in range" : String.join("\n", results);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String compareMemory(String address1Str, String address2Str, int length) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		try {
+			Address addr1 = program.getAddressFactory().getAddress(address1Str);
+			Address addr2 = program.getAddressFactory().getAddress(address2Str);
+			Memory memory = program.getMemory();
+
+			byte[] bytes1 = new byte[length];
+			byte[] bytes2 = new byte[length];
+
+			try {
+				memory.getBytes(addr1, bytes1);
+				memory.getBytes(addr2, bytes2);
+			} catch (MemoryAccessException e) {
+				return "Error: Cannot read memory at specified addresses";
+			}
+
+			List<String> differences = new ArrayList<>();
+			for (int i = 0; i < length; i++) {
+				if (bytes1[i] != bytes2[i]) {
+					differences.add(String.format("Offset 0x%02X: 0x%02X != 0x%02X", i, bytes1[i] & 0xFF, bytes2[i] & 0xFF));
+				}
+			}
+
+			return differences.isEmpty() ? "Memory regions are identical" : String.join("\n", differences);
+		} catch (Exception e) {
+			return "Error: " + e.getMessage();
+		}
+	}
+
+	private String createFunction(String addressStr, String functionName) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		if (addressStr == null || addressStr.isEmpty()) return "Error: address is required";
+		if (functionName == null || functionName.isEmpty()) return "Error: functionName is required";
+
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			AtomicBoolean successFlag = new AtomicBoolean(false);
+			final String[] result = new String[1];
+
+			SwingUtilities.invokeAndWait(() -> {
+				int tx = program.startTransaction("Create function");
+				try {
+					Function func = program.getFunctionManager().createFunction(functionName, null, addr, null, SourceType.USER_DEFINED);
+					if (func != null) {
+						successFlag.set(true);
+						result[0] = "Created function '" + functionName + "' at " + addressStr;
+					} else {
+						result[0] = "Error: Failed to create function";
+					}
+				} catch (Exception e) {
+					Msg.error(this, "Error creating function", e);
+					result[0] = "Error: " + e.getMessage();
+				} finally {
+					program.endTransaction(tx, successFlag.get());
+				}
+			});
+			return result[0] != null ? result[0] : "Failed to create function";
+		} catch (Exception e) {
+			return "Error: " + e.getClass().getName() + ": " + e.getMessage();
+		}
+	}
+
+	private String deleteFunction(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		if (addressStr == null || addressStr.isEmpty()) return "Error: address is required";
+
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			AtomicBoolean successFlag = new AtomicBoolean(false);
+			final String[] result = new String[1];
+
+			SwingUtilities.invokeAndWait(() -> {
+				int tx = program.startTransaction("Delete function");
+				try {
+					Function func = program.getFunctionManager().getFunctionContaining(addr);
+					if (func != null) {
+						program.getFunctionManager().removeFunction(func.getEntryPoint());
+						successFlag.set(true);
+						result[0] = "Deleted function at " + addressStr;
+					} else {
+						result[0] = "Error: No function found at address";
+					}
+				} catch (Exception e) {
+					Msg.error(this, "Error deleting function", e);
+					result[0] = "Error: " + e.getMessage();
+				} finally {
+					program.endTransaction(tx, successFlag.get());
+				}
+			});
+			return result[0] != null ? result[0] : "Failed to delete function";
+		} catch (Exception e) {
+			return "Error: " + e.getClass().getName() + ": " + e.getMessage();
+		}
+	}
+
+	private String addBookmark(String addressStr, String category, String description) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		if (addressStr == null || addressStr.isEmpty()) return "Error: address is required";
+		if (category == null || category.isEmpty()) category = "User";
+		if (description == null) description = "";
+
+		final String finalCategory = category;
+		final String finalDescription = description;
+		final String finalAddressStr = addressStr;
+
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			AtomicBoolean successFlag = new AtomicBoolean(false);
+			final String[] result = new String[1];
+
+			SwingUtilities.invokeAndWait(() -> {
+				int tx = program.startTransaction("Add bookmark");
+				try {
+					BookmarkManager bm = program.getBookmarkManager();
+					bm.setBookmark(addr, BookmarkType.INFO, finalCategory, finalDescription);
+					successFlag.set(true);
+					result[0] = "Added bookmark at " + finalAddressStr + " [Category: " + finalCategory + "] - '" + finalDescription + "'";
+				} catch (Exception e) {
+					Msg.error(this, "Error adding bookmark", e);
+					result[0] = "Error: " + e.getMessage();
+				} finally {
+					program.endTransaction(tx, successFlag.get());
+				}
+			});
+			return result[0] != null ? result[0] : "Failed to add bookmark";
+		} catch (Exception e) {
+			return "Error: " + e.getClass().getName() + ": " + e.getMessage();
+		}
+	}
+
+	private String removeBookmark(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return "No program loaded";
+		if (addressStr == null || addressStr.isEmpty()) return "Error: address is required";
+
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			AtomicBoolean successFlag = new AtomicBoolean(false);
+			final String[] result = new String[1];
+
+			SwingUtilities.invokeAndWait(() -> {
+				int tx = program.startTransaction("Remove bookmark");
+				try {
+					BookmarkManager bm = program.getBookmarkManager();
+					Bookmark[] bookmarks = bm.getBookmarks(addr);
+					int count = 0;
+					for (Bookmark b : bookmarks) {
+						bm.removeBookmark(b);
+						count++;
+					}
+					successFlag.set(true);
+					result[0] = "Removed " + count + " bookmark(s) at " + addressStr;
+				} catch (Exception e) {
+					Msg.error(this, "Error removing bookmark", e);
+					result[0] = "Error: " + e.getMessage();
+				} finally {
+					program.endTransaction(tx, successFlag.get());
+				}
+			});
+			return result[0] != null ? result[0] : "Failed to remove bookmark";
 		} catch (Exception e) {
 			return "Error: " + e.getClass().getName() + ": " + e.getMessage();
 		}
