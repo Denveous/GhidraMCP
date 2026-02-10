@@ -23,7 +23,7 @@ MCP Server + Ghidra Plugin
 
 # MCP Tools
 
-ghidraMCP exposes 57 tools through MCP for LLM-assisted reverse engineering:
+ghidraMCP exposes 59 tools through MCP for LLM-assisted reverse engineering:
 
 ## Listing & Navigation
 
@@ -40,6 +40,8 @@ ghidraMCP exposes 57 tools through MCP for LLM-assisted reverse engineering:
 | `get_current_address` | Get the address currently selected by user |
 | `get_current_function` | Get the function currently selected by user |
 | `get_entry_points` | Get all entry points (external symbols) |
+| `get_open_programs` | List all programs in the current Ghidra project (open and available) |
+| `switch_program` | Switch active program or open a new program from the project |
 
 ## Decompilation & Disassembly
 

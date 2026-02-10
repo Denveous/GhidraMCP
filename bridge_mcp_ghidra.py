@@ -655,6 +655,32 @@ def get_equates(address: str) -> list:
                 pass
     return []
 
+@mcp.tool()
+def get_open_programs() -> list:
+    """
+    Get all open programs in Ghidra.
+    Returns list with path, name, and current (bool) for each.
+    """
+    import json
+    response = safe_get("get_open_programs")
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return []
+
+@mcp.tool()
+def switch_program(path: str) -> str:
+    """
+    Switch the active program in Ghidra.
+    Use path or name from get_open_programs() to identify the program.
+    Returns confirmation message.
+    """
+    return "\n".join(safe_get("switch_program", {"path": path}))
+
 def main():
     parser = argparse.ArgumentParser(description="MCP server for Ghidra")
     parser.add_argument("--ghidra-server", type=str, default=DEFAULT_GHIDRA_SERVER,
