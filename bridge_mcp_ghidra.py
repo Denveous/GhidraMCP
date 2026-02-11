@@ -758,6 +758,82 @@ def run_auto_analysis() -> str:
     """Trigger Ghidra's auto-analysis on current program."""
     return safe_post("run_auto_analysis", {})
 
+@mcp.tool()
+def undo() -> str:
+    """Undo the last Ghidra operation."""
+    return safe_post("undo", {})
+
+@mcp.tool()
+def redo() -> str:
+    """Redo the last undone Ghidra operation."""
+    return safe_post("redo", {})
+
+@mcp.tool()
+def create_data(address: str, datatype: str) -> str:
+    """Create data at the specified address with the given datatype."""
+    return safe_post("create_data", {"address": address, "datatype": datatype})
+
+@mcp.tool()
+def apply_data_type(address: str, datatype_name: str) -> str:
+    """Apply a named data type to the data at the specified address."""
+    return safe_post("apply_data_type", {"address": address, "datatype_name": datatype_name})
+
+@mcp.tool()
+def go_to_address(address: str) -> str:
+    """Navigate to the specified address in Ghidra."""
+    return safe_post("go_to_address", {"address": address})
+
+@mcp.tool()
+def get_current_selection() -> dict:
+    """Get the current address selection in Ghidra. Returns dict with start and end addresses."""
+    response = safe_get("get_current_selection")
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return {"error": "No selection"}
+
+@mcp.tool()
+def set_selection(start: str, end: str) -> str:
+    """Set the current address selection in Ghidra."""
+    return safe_post("set_selection", {"start": start, "end": end})
+
+@mcp.tool()
+def run_script(script_path: str) -> str:
+    """Run a Ghidra script at the specified path."""
+    return safe_post("run_script", {"script_path": script_path})
+
+@mcp.tool()
+def save_program() -> str:
+    """Save the current Ghidra program."""
+    return safe_post("save_program", {})
+
+@mcp.tool()
+def get_program_info() -> dict:
+    """Get information about the current Ghidra program. Returns dict with program metadata."""
+    response = safe_get("get_program_info")
+    if response and len(response) > 0:
+        full = "\n".join(response)
+        if full.strip() and not full.startswith("Error"):
+            try:
+                return json.loads(full)
+            except:
+                pass
+    return {"error": "Failed to get program info"}
+
+@mcp.tool()
+def analyze_function(address: str) -> str:
+    """Analyze the function at the specified address."""
+    return safe_post("analyze_function", {"address": address})
+
+@mcp.tool()
+def clear_analysis(address: str) -> str:
+    """Clear analysis results at the specified address."""
+    return safe_post("clear_analysis", {"address": address})
+
 def main():
     parser = argparse.ArgumentParser(description="MCP server for Ghidra")
     parser.add_argument("--ghidra-server", type=str, default=DEFAULT_GHIDRA_SERVER,

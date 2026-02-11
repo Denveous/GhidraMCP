@@ -23,7 +23,7 @@ MCP Server + Ghidra Plugin
 
 # MCP Tools
 
-ghidraMCP exposes 73 tools through MCP for LLM-assisted reverse engineering:
+ghidraMCP exposes 78 tools through MCP for LLM-assisted reverse engineering:
 
 ## Listing & Navigation
 
@@ -130,6 +130,17 @@ ghidraMCP exposes 73 tools through MCP for LLM-assisted reverse engineering:
 |------|-------------|
 | `get_bookmarks` | Get all bookmarks in program |
 | `get_equates` | Get equate tables for values at address |
+
+## Data Creation & Navigation
+
+| Tool | Description |
+|------|-------------|
+| `create_data` | Create data at address with specified datatype (byte, word, dword, qword, float, double, pointer) |
+| `apply_data_type` | Apply named data type from DataTypeManager to address *(pending - type lookup issues)* |
+| `go_to_address` | Navigate to specified address in Ghidra |
+| `get_program_info` | Get information about current program (name, language, compiler, architecture) |
+| `analyze_function` | Analyze function at specified address |
+| `clear_analysis` | Clear analysis results at specified address |
 
 ## Export
 

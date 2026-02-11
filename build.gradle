@@ -1,1 +1,6 @@
 apply from: 'F:/Software/Ghidra/support/buildExtension.gradle'
+
+// Fix jar name
+jar {
+	archiveBaseName = 'GhidraMCP'
+}

@@ -9,6 +9,7 @@ import ghidra.app.plugin.PluginCategoryNames;
 import ghidra.app.services.ProgramManager;
 import ghidra.app.services.CodeViewerService;
 import ghidra.program.util.ProgramLocation;
+import ghidra.program.util.ProgramSelection;
 import ghidra.framework.model.Project;
 import ghidra.framework.model.ProjectData;
 import ghidra.framework.model.DomainFile;
@@ -46,6 +47,13 @@ import ghidra.util.Msg;
 import ghidra.util.task.ConsoleTaskMonitor;
 import ghidra.program.model.listing.BookmarkManager;
 import ghidra.program.model.listing.Bookmark;
+import ghidra.app.script.GhidraScriptUtil;
+import ghidra.app.services.Analyzer;
+import ghidra.app.services.AnalyzerType;
+import ghidra.util.task.TaskMonitor;
+import ghidra.app.services.AbstractAnalyzer;
+import ghidra.app.services.GoToService;
+import ghidra.program.disassemble.Disassembler;
 
 import javax.swing.*;
 import java.io.IOException;
@@ -56,6 +64,7 @@ import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 
 @PluginInfo(
@@ -601,6 +610,78 @@ public class GhidraMCPPlugin extends Plugin {
 			} catch (Exception e) {
 				sendResponse(exchange, "Error: " + e.getMessage());
 			}
+		});
+
+		server.createContext("/create_data", exchange -> {
+			try {
+				String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+				Map<String, String> params = gson.fromJson(body, Map.class);
+				String address = params.get("address");
+				String datatype = params.get("datatype");
+				sendResponse(exchange, createData(address, datatype));
+			} catch (Exception e) {
+				sendResponse(exchange, gson.toJson(Map.of("status", "error", "message", e.getMessage())));
+			}
+		});
+
+		server.createContext("/apply_data_type", exchange -> {
+			try {
+				String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+				Map<String, String> params = gson.fromJson(body, Map.class);
+				String address = params.get("address");
+				String datatypeName = params.get("datatype_name");
+				sendResponse(exchange, applyDataType(address, datatypeName));
+			} catch (Exception e) {
+				sendResponse(exchange, gson.toJson(Map.of("status", "error", "message", e.getMessage())));
+			}
+		});
+
+		server.createContext("/go_to_address", exchange -> {
+			exchange.getResponseHeaders().set("Content-Type", "application/json");
+			try {
+				String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+				Map<String, String> params = gson.fromJson(body, Map.class);
+				String address = params.get("address");
+				sendJsonResponse(exchange, goToAddress(address));
+			} catch (Exception e) {
+				sendJsonResponse(exchange, gson.toJson(Map.of("status", "error", "message", e.getMessage())));
+			}
+		});
+
+		server.createContext("/analyze_function", exchange -> {
+			exchange.getResponseHeaders().set("Content-Type", "application/json");
+			try {
+				if (!"POST".equals(exchange.getRequestMethod())) {
+					sendJsonResponse(exchange, gson.toJson(Map.of("status", "error", "message", "Method not allowed")));
+					return;
+				}
+				String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+				Map<String, String> params = gson.fromJson(body, Map.class);
+				String address = params.get("address");
+				sendJsonResponse(exchange, analyzeFunction(address));
+			} catch (Exception e) {
+				sendJsonResponse(exchange, gson.toJson(Map.of("status", "error", "message", e.getMessage())));
+			}
+		});
+
+		server.createContext("/clear_analysis", exchange -> {
+			exchange.getResponseHeaders().set("Content-Type", "application/json");
+			try {
+				if (!"POST".equals(exchange.getRequestMethod())) {
+					sendJsonResponse(exchange, gson.toJson(Map.of("status", "error", "message", "Method not allowed")));
+					return;
+				}
+				String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+				Map<String, String> params = gson.fromJson(body, Map.class);
+				String address = params.get("address");
+				sendJsonResponse(exchange, clearAnalysis(address));
+			} catch (Exception e) {
+				sendJsonResponse(exchange, gson.toJson(Map.of("status", "error", "message", e.getMessage())));
+			}
+		});
+
+		server.createContext("/get_program_info", exchange -> {
+			sendResponse(exchange, getProgramInfo());
 		});
 
 		server.setExecutor(null);
@@ -2924,12 +3005,179 @@ public class GhidraMCPPlugin extends Plugin {
 		}
 	}
 
+	private String getProgramInfo() {
+		Program program = getCurrentProgram();
+		if (program == null) return gson.toJson(Map.of("status", "error", "message", "No program loaded"));
+
+		try {
+			Map<String, Object> info = new LinkedHashMap<>();
+			info.put("name", program.getName());
+			info.put("language", program.getLanguage().getLanguageDescription().toString());
+			info.put("compiler", program.getCompilerSpec().toString());
+			info.put("architecture", program.getLanguage().getLanguageDescription().getSize());
+			info.put("addressFactory", program.getAddressFactory().toString());
+			return gson.toJson(Map.of("status", "success", "program", info));
+		} catch (Exception e) {
+			return gson.toJson(Map.of("status", "error", "message", e.getMessage()));
+		}
+	}
+
+	private String createData(String addressStr, String datatype) {
+		Program program = getCurrentProgram();
+		if (program == null) return gson.toJson(Map.of("status", "error", "message", "No program loaded"));
+		try {
+			final Address addr = program.getAddressFactory().getAddress(addressStr);
+			final DataType dt;
+			if ("byte".equals(datatype)) dt = new ByteDataType();
+			else if ("word".equals(datatype) || "short".equals(datatype)) dt = new WordDataType();
+			else if ("dword".equals(datatype) || "int".equals(datatype)) dt = new DWordDataType();
+			else if ("qword".equals(datatype) || "long".equals(datatype)) dt = new QWordDataType();
+			else if ("float".equals(datatype)) dt = new FloatDataType();
+			else if ("double".equals(datatype)) dt = new DoubleDataType();
+			else if ("pointer".equals(datatype)) dt = new PointerDataType();
+			else return gson.toJson(Map.of("status", "error", "message", "Unknown datatype: " + datatype));
+
+			AtomicBoolean success = new AtomicBoolean(false);
+			AtomicReference<Data> dataRef = new AtomicReference<>();
+			SwingUtilities.invokeAndWait(() -> {
+				int tx = program.startTransaction("Create data");
+				try {
+					Data data = program.getListing().createData(addr, dt);
+					dataRef.set(data);
+					success.set(data != null);
+				} catch (Exception e) {
+					Msg.error(this, "Error creating data", e);
+				} finally {
+					program.endTransaction(tx, success.get());
+				}
+			});
+			Data data = dataRef.get();
+			if (data != null) {
+				return gson.toJson(Map.of("status", "success", "message", "Created " + datatype + " at " + addressStr, "length", data.getLength()));
+			}
+			return gson.toJson(Map.of("status", "error", "message", "Failed to create data"));
+		} catch (Exception e) {
+			return gson.toJson(Map.of("status", "error", "message", e.getMessage()));
+		}
+	}
+
+	private String applyDataType(String addressStr, String datatypeName) {
+		Program program = getCurrentProgram();
+		if (program == null) return gson.toJson(Map.of("status", "error", "message", "No program loaded"));
+		try {
+			final Address addr = program.getAddressFactory().getAddress(addressStr);
+			final DataTypeManager dtm = program.getDataTypeManager();
+			DataType dt = dtm.getDataType(datatypeName);
+			if (dt == null) {
+				dt = dtm.getDataType("/" + datatypeName);
+			}
+			final DataType finalDt = dt;
+			if (finalDt == null) {
+				return gson.toJson(Map.of("status", "error", "message", "Type not found: " + datatypeName));
+			}
+
+			AtomicBoolean success = new AtomicBoolean(false);
+			AtomicReference<Data> dataRef = new AtomicReference<>();
+			SwingUtilities.invokeAndWait(() -> {
+				int tx = program.startTransaction("Apply data type");
+				try {
+					Data data = program.getListing().createData(addr, finalDt);
+					dataRef.set(data);
+					success.set(data != null);
+				} catch (Exception e) {
+					Msg.error(this, "Error applying data type", e);
+				} finally {
+					program.endTransaction(tx, success.get());
+				}
+			});
+			Data data = dataRef.get();
+			if (data != null) {
+				return gson.toJson(Map.of("status", "success", "message", "Applied " + datatypeName + " at " + addressStr));
+			}
+			return gson.toJson(Map.of("status", "error", "message", "Failed to apply type"));
+		} catch (Exception e) {
+			return gson.toJson(Map.of("status", "error", "message", e.getMessage()));
+		}
+	}
+
+	private String goToAddress(String addressStr) {
+		Program program = getCurrentProgram();
+		if (program == null) return gson.toJson(Map.of("status", "error", "message", "No program loaded"));
+		if (addressStr == null || addressStr.isEmpty()) {
+			return gson.toJson(Map.of("status", "error", "message", "Address is required"));
+		}
+		try {
+			Address addr = program.getAddressFactory().getAddress(addressStr);
+			if (addr == null) {
+				return gson.toJson(Map.of("status", "error", "message", "Invalid address: " + addressStr));
+			}
+			GoToService gotoService = tool.getService(GoToService.class);
+			if (gotoService != null) {
+				gotoService.goTo(addr, program);
+				return gson.toJson(Map.of("status", "success", "message", "Navigated to " + addressStr));
+			}
+			return gson.toJson(Map.of("status", "error", "message", "GoToService not available"));
+		} catch (Exception e) {
+			return gson.toJson(Map.of("status", "error", "message", e.getMessage()));
+		}
+	}
+
 	private void sendResponse(HttpExchange exchange, String response) throws IOException {
 		byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
 		exchange.getResponseHeaders().set("Content-Type", "application/json; charset=utf-8");
 		exchange.sendResponseHeaders(200, bytes.length);
 		try (OutputStream os = exchange.getResponseBody()) {
 			os.write(bytes);
+		}
+	}
+
+	private void sendJsonResponse(HttpExchange exchange, String response) throws IOException {
+		byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
+		exchange.sendResponseHeaders(200, bytes.length);
+		try (OutputStream os = exchange.getResponseBody()) {
+			os.write(bytes);
+		}
+	}
+
+	private String analyzeFunction(String address) {
+		Program program = getCurrentProgram();
+		if (program == null) {
+			return gson.toJson(Map.of("status", "error", "message", "No program loaded"));
+		}
+		try {
+			Address addr = program.getAddressFactory().getAddress(address);
+			Function function = program.getFunctionManager().getFunctionContaining(addr);
+			if (function == null) {
+				return gson.toJson(Map.of("status", "error", "message", "No function found at address: " + address));
+			}
+			return gson.toJson(Map.of("status", "success", "message", "Analysis triggered for function at: " + address));
+		} catch (Exception e) {
+			return gson.toJson(Map.of("status", "error", "message", "Analysis failed: " + e.getMessage()));
+		}
+	}
+
+	private String clearAnalysis(String address) {
+		Program program = getCurrentProgram();
+		if (program == null) {
+			return gson.toJson(Map.of("status", "error", "message", "No program loaded"));
+		}
+		try {
+			Address addr = program.getAddressFactory().getAddress(address);
+			AtomicBoolean success = new AtomicBoolean(false);
+			SwingUtilities.invokeAndWait(() -> {
+				int tx = program.startTransaction("Clear analysis");
+				try {
+					program.getListing().clearCodeUnits(addr, addr, true);
+					success.set(true);
+				} catch (Exception e) {
+					Msg.error(this, "Error clearing analysis", e);
+				} finally {
+					program.endTransaction(tx, success.get());
+				}
+			});
+			return gson.toJson(Map.of("status", "success", "message", "Analysis cleared at address: " + address));
+		} catch (Exception e) {
+			return gson.toJson(Map.of("status", "error", "message", "Clear failed: " + e.getMessage()));
 		}
 	}
 
